@@ -29,6 +29,9 @@ try {
     case 'done':
       list.complete(Number(args[0]));
       break;
+    case 'mv':
+      list.rename(Number(args[0]), args.slice(1).join(' '));
+      break;
     case 'rm':
       list.remove(Number(args[0]));
       break;
@@ -36,7 +39,7 @@ try {
     case undefined:
       break;
     default:
-      console.error('Usage: todo [add <title> | done <id> | rm <id> | ls]');
+      console.error('Usage: todo [add <title> | done <id> | mv <id> <title> | rm <id> | ls]');
       process.exit(2);
   }
 } catch (error) {
