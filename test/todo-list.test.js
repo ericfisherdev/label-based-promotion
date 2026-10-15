@@ -29,6 +29,16 @@ test('remove deletes the item', () => {
   assert.deepEqual(list.list(), []);
 });
 
+test('clearCompleted removes done items and returns the count', () => {
+  const list = new TodoList();
+  list.add('Buy milk');
+  const { id } = list.add('Walk dog');
+  list.complete(id);
+
+  assert.equal(list.clearCompleted(), 1);
+  assert.deepEqual(list.list().map((item) => item.title), ['Buy milk']);
+});
+
 test('complete and remove reject an unknown id', () => {
   const list = new TodoList();
 

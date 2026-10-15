@@ -26,6 +26,13 @@ export class TodoList {
     this.#items = this.#items.filter((candidate) => candidate !== item);
   }
 
+  clearCompleted() {
+    const before = this.#items.length;
+    this.#items = this.#items.filter((item) => !item.done);
+
+    return before - this.#items.length;
+  }
+
   list() {
     return this.#items.map((item) => ({ ...item }));
   }
