@@ -1,0 +1,17 @@
+{
+  "name": "label-based-promotion",
+  "version": "1.0.0",
+  "description": "Example to-do list app used to demo the testing + qa label-based promotion model (MBC-3938).",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "todo": "src/cli.js"
+  },
+  "scripts": {
+    "test": "node --test \"test/**/*.test.js\"",
+    "test:scripts": "bash tests/run.sh"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

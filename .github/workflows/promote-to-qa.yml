@@ -1,0 +1,83 @@
+# Opens a promotion PR (same head branch -> qa) when ready-for-qa is added
+# to a PR that is already merged into testing.
+#
+# pull_request_target: the YAML comes from the base branch, not from the
+# merged PR. This workflow never runs PR code, so it is safe.
+name: Promote to qa
+
+on:
+  pull_request_target:
+    types: [labeled]
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+
+concurrency:
+  group: promote-${{ github.event.pull_request.number }}
+  cancel-in-progress: false
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  promote:
+    if: >-
+      github.event.label.name == 'ready-for-qa' &&
+      github.event.pull_request.merged == true &&
+      github.event.pull_request.base.ref == 'testing' &&
+      !contains(github.event.pull_request.labels.*.name, 'promoted-to-qa')
+    runs-on: ubuntu-latest
+    env:
+      # GITHUB_TOKEN cannot trigger other workflows. Use a PAT or GitHub App
+      # token so that the required checks run on the promotion PR at once.
+      GH_TOKEN: ${{ secrets.PROMOTION_TOKEN || github.token }}
+      GH_REPO: ${{ github.repository }}
+      PR_NUMBER: ${{ github.event.pull_request.number }}
+      HEAD_REF: ${{ github.event.pull_request.head.ref }}
+      HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+    steps:
+      # Default ref for pull_request_target: the base-branch commit that this
+      # YAML came from, so the YAML and the scripts always match.
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check head branch is the tested commit
+        run: |
+          tip="$(git rev-parse --verify --quiet "origin/$HEAD_REF" || true)"
+          if [[ -z "$tip" ]]; then
+            echo "Head branch \`$HEAD_REF\` was deleted. Restore it, or turn off \"Automatically delete head branches\"." \
+              | tee "$RUNNER_TEMP/branch.md"
+            exit 1
+          fi
+          if [[ "$tip" != "$HEAD_SHA" ]]; then
+            echo "\`$HEAD_REF\` has commits that were pushed after this PR merged into \`testing\`. They are untested. Open a new PR into \`testing\`, and add \`ready-for-qa\` to that PR." \
+              | tee "$RUNNER_TEMP/branch.md"
+            exit 1
+          fi
+
+      - name: Check dependencies
+        run: .github/scripts/check-dependencies.sh "$PR_NUMBER" promote | tee "$RUNNER_TEMP/deps.md"
+
+      - name: Check branch has no commits from testing
+        run: .github/scripts/check-branch-clean.sh origin/qa origin/testing "origin/$HEAD_REF" | tee "$RUNNER_TEMP/clean.md"
+
+      - name: Check branch merges into qa without conflicts
+        run: .github/scripts/check-mergeable.sh origin/qa "origin/$HEAD_REF" | tee "$RUNNER_TEMP/conflict.md"
+
+      - name: Open promotion PR
+        run: |
+          .github/scripts/open-promotion-pr.sh "$PR_NUMBER" "$HEAD_REF" "$RUNNER_TEMP/deps.md" || {
+            echo "Could not open the promotion PR. See the run log." >"$RUNNER_TEMP/open.md"
+            exit 1
+          }
+
+      - name: Block promotion
+        if: failure()
+        run: |
+          .github/scripts/block-promotion.sh "$PR_NUMBER" \
+            "$RUNNER_TEMP/branch.md" "$RUNNER_TEMP/deps.md" "$RUNNER_TEMP/clean.md" \
+            "$RUNNER_TEMP/conflict.md" "$RUNNER_TEMP/open.md"

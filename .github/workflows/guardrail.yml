@@ -1,0 +1,58 @@
+# Required checks on PRs into testing and qa.
+#
+#   no-testing-merge  The branch must not contain commits from testing.
+#   qa-gate           (qa only) The exact head commit passed testing, has
+#                     ready-for-qa, and every dependency is already in qa.
+#
+# This is pull_request (not pull_request_target), because a required check
+# must report on the PR head commit. So the PR's own copy of this YAML runs.
+# It stops mistakes, not misuse. See the README findings.
+name: Guardrail
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, edited, ready_for_review]
+    branches: [testing, qa]
+
+permissions:
+  contents: read
+  pull-requests: read
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  no-testing-merge:
+    name: no-testing-merge
+    runs-on: ubuntu-latest
+    env:
+      BASE_REF: ${{ github.event.pull_request.base.ref }}
+      HEAD_REF: ${{ github.event.pull_request.head.ref }}
+      HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+    steps:
+      # Use the check script from the default branch, not from the PR.
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          fetch-depth: 0
+
+      - run: git fetch --no-tags origin "$HEAD_SHA"
+
+      - run: .github/scripts/guardrail.sh "$BASE_REF" "$HEAD_REF" "$HEAD_SHA" | tee -a "$GITHUB_STEP_SUMMARY"
+
+  qa-gate:
+    name: qa-gate
+    if: github.event.pull_request.base.ref == 'qa'
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      HEAD_REF: ${{ github.event.pull_request.head.ref }}
+      HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+
+      - run: .github/scripts/check-qa-gate.sh "$HEAD_REF" "$HEAD_SHA" | tee -a "$GITHUB_STEP_SUMMARY"
