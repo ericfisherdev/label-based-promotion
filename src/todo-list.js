@@ -21,6 +21,18 @@ export class TodoList {
     return { ...item };
   }
 
+  rename(id, title) {
+    const trimmed = String(title ?? '').trim();
+    if (trimmed === '') {
+      throw new Error('Title must not be empty.');
+    }
+
+    const item = this.#find(id);
+    item.title = trimmed;
+
+    return { ...item };
+  }
+
   remove(id) {
     const item = this.#find(id);
     this.#items = this.#items.filter((candidate) => candidate !== item);

@@ -39,6 +39,14 @@ test('clearCompleted removes done items and returns the count', () => {
   assert.deepEqual(list.list().map((item) => item.title), ['Buy milk']);
 });
 
+test('rename changes the title and rejects an empty one', () => {
+  const list = new TodoList();
+  const { id } = list.add('Buy milk');
+
+  assert.equal(list.rename(id, 'Buy oat milk').title, 'Buy oat milk');
+  assert.throws(() => list.rename(id, ' '), /must not be empty/);
+});
+
 test('complete and remove reject an unknown id', () => {
   const list = new TodoList();
 
