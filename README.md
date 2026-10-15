@@ -116,3 +116,4 @@ Other limits:
 - **Commit SHAs are equal in `testing` and `qa`** only when PRs into `testing` use "Create a merge commit". With squash or rebase into `testing`, `qa` still gets the original branch commits, but `testing` has copies.
 - **Fork PRs** are out of scope. The workflows assume same-repo branches (true for identity).
 - **Off-the-shelf backport actions** (for example `korthout/backport-action`) cherry-pick commits onto a new branch. This model reuses the original branch, so a small `gh` script fits better.
+
