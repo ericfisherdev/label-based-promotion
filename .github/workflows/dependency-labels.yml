@@ -28,6 +28,6 @@ jobs:
     steps:
       # Default ref for pull_request_target: the base-branch commit that this
       # YAML came from, so the YAML and the scripts always match.
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - run: .github/scripts/sync-dependency-labels.sh "$PR_NUMBER"
