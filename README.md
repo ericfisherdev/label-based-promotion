@@ -91,11 +91,27 @@ Failure demos:
 
 Retry after a fix: remove `ready-for-qa` and add it again.
 
+## Demo results (2026-10-15)
+
+Run on this repo with `scripts/setup-repo.sh` and real PRs, with `actions/checkout@v4` and `actions/setup-node@v4`. Scenarios A to D ran. The gates worked as designed; the surprises are listed under "Found in the demo". The untested-commit demo was not run.
+
+| Scenario | PRs | Result |
+|---|---|---|
+| A. Normal path | #1 -> `testing`, #2 -> `qa` | `ready-for-qa` on #1 opened draft #2 from the same branch. After #2 merged, #1 got `promoted-to-qa`. |
+| B + C. Dependency | #3 (B), #4 (C, stacked on B, `Depends on: #3`), #5, #6 | `ready-for-qa` on #4 while #3 was untested: blocked with a comment. `ready-for-qa` on #3 opened #5. A retry on #4 opened #6. #6 failed `qa-gate`, and branch protection refused the merge. #5 merged and #3 got `promoted-to-qa`. `qa-gate` on #6 did not re-run by itself; after `gh run rerun --failed` it passed, #6 merged, and #4 got `promoted-to-qa`. |
+| D. Guardrail | #7 | The branch merged `testing`. `no-testing-merge` failed and listed the 2 `testing` merge commits. Left open as the failure example. |
+
+Verified GitHub behaviors:
+
+- `pull_request_target` with `labeled` starts on a merged PR.
+- A `::warning::` that a script writes to stderr shows as an annotation.
+- GitHub marks a PR as merged when another PR brings its head commit into the base. #3 shows "merged" (and still draft) because #4, stacked on it, merged into `testing`.
+
 ## Findings for the spike
 
 Setup and platform:
 
-- **GITHUB_TOKEN does not start other workflows.** A promotion PR that `GITHUB_TOKEN` opens runs no checks. This example opens it as a draft, and "Ready for review" by a person starts the checks. To run them at once, add a `PROMOTION_TOKEN` secret (GitHub App token preferred). The workflow uses it when it exists.
+- **GITHUB_TOKEN does not start other workflows.** A promotion PR that `GITHUB_TOKEN` opens gets no new check results (see "Bot-opened PRs make empty failed runs"). This example opens it as a draft, and "Ready for review" by a person starts the checks. To run them at once, add a `PROMOTION_TOKEN` secret (GitHub App token preferred). The workflow uses it when it exists.
 - **"Allow GitHub Actions to create and approve pull requests"** must be on. The setup script does it.
 - **"Automatically delete head branches"** must be off. Otherwise the branch is gone before PR 2. The workflow blocks with a clear message if this happens.
 - **`pull_request_target`** is used for the label workflows, so the YAML comes from the current base branch and not from an old merged PR. They check out that same base commit, so the YAML and the scripts always match. They read PR data only and never run PR code.
@@ -104,13 +120,21 @@ Setup and platform:
 Limits of the guardrail:
 
 - **It stops mistakes, not misuse.** The required checks use `pull_request`, because a required check must report on the PR head commit. So a PR can edit its own copy of `guardrail.yml` to pass. The check scripts come from the default branch, but the YAML does not. For identity, protect `.github/` with CODEOWNERS and code-owner review, or use an org ruleset "Require workflows to pass" from a central repo.
-- **Conflicts with `testing`.** `testing` collects many untested PRs, so PR 1 often has conflicts. GitHub's "Resolve conflicts" and "Update branch" buttons merge `testing` into the feature branch, and the guardrail then blocks the branch. The spike says: fix the conflict in a merge commit on `testing`, never in the feature branch. On GitHub, that needs a short-lived branch from `testing` named `resolve/<ticket>` that merges the feature branch and fixes the conflict, merged into `testing` by its own PR. The guardrail exempts `resolve/*` into `testing`. The exemption is by branch name only, so any developer can use it to land a `testing` merge in `testing` (not in `qa`). If identity needs more control, a ruleset can limit who can push `resolve/*` refs. PR 1 then shows as merged when its head commit reaches `testing` (verify in the demo). Measure how often this happens before go / no-go.
+- **Conflicts with `testing`.** `testing` collects many untested PRs, so PR 1 often has conflicts. GitHub's "Resolve conflicts" and "Update branch" buttons merge `testing` into the feature branch, and the guardrail then blocks the branch. The spike says: fix the conflict in a merge commit on `testing`, never in the feature branch. On GitHub, that needs a short-lived branch from `testing` named `resolve/<ticket>` that merges the feature branch and fixes the conflict, merged into `testing` by its own PR. The guardrail exempts `resolve/*` into `testing`. The exemption is by branch name only, so any developer can use it to land a `testing` merge in `testing` (not in `qa`). If identity needs more control, a ruleset can limit who can push `resolve/*` refs. PR 1 then shows as merged when its head commit reaches `testing` (verified in the demo, see #3). Measure how often this happens before go / no-go.
 - **A sprint reset of `testing` forgives old mistakes.** A branch that merged the old `testing` passes after the reset. The old untested commits are then "not in testing", so the rule no longer sees them. Reset only when no such branch is open.
 - **Fast-forward pushes to `testing`** (outside a PR) would put feature commits on the first-parent chain and cause false positives. The setup script requires a PR for `testing` and `qa`. The sprint reset of `testing` is a manual repo-admin push.
 
+Found in the demo:
+
+- **Merging a stacked PR also merges its dependency.** B reached `testing` without its own merge decision, while it was still a draft (see "Verified GitHub behaviors"). Decide with the team: accept this, or require that the dependency PR merges into `testing` first.
+- **Check results carry over to the promotion PR.** The promotion PR has the same head commit as PR 1. Before "Ready for review", it already shows the `app` and `no-testing-merge` results of PR 1, and only `qa-gate` is missing. "Ready for review" re-runs all checks. This makes `qa-gate` the most important required check, and it is the only one that the `GITHUB_TOKEN` limit really delays.
+- **Bot-opened PRs make empty failed runs.** When `GITHUB_TOKEN` opened #2, #5 and #6, GitHub made Tests and Guardrail runs as `github-actions[bot]` with no jobs. GitHub reports them as a likely "workflow file issue". They do not show in the PR checks, but they show as red runs in the Actions tab. The cause is not confirmed. A `PROMOTION_TOKEN` (GitHub App) would probably avoid them; verify.
+- **Use a current `gh`.** gh 2.45 (Ubuntu apt) fails on `gh pr edit` with "Projects (classic) is being deprecated". The runner's gh works. For local use, install gh from GitHub's own package repository.
+- **Keep actions current.** `actions/checkout@v4` and `actions/setup-node@v4` gave Node 20 deprecation warnings. This repo now uses `@v5` (node24), which has not had a full demo run yet. Newer majors exist (checkout v7.0.1, setup-node v7.1.0). Checkout v5.1.0 and later block fork-PR checkout in `pull_request_target`. This repo checks out only the base commit there, so it is not affected. Read the release notes before moving identity to v7.
+
 Other limits:
 
-- **`qa-gate` does not re-run** when a dependency is promoted later. Re-run the check, or push to the branch. A follow-up could re-trigger dependents from `mark-promoted.yml`.
+- **`qa-gate` does not re-run** when a dependency is promoted later (seen in the demo). Re-run it with `gh run rerun <run-id> --failed`. A follow-up could re-trigger dependents from `mark-promoted.yml`.
 - **`is-dependency` is not removed** when a `Depends on:` line is deleted, because another PR may still depend on it.
 - **`promoted-to-qa` added by hand** is not prevented. A person who adds it to a dependency gets past the dependency gate.
 - **Commit SHAs are equal in `testing` and `qa`** only when PRs into `testing` use "Create a merge commit". With squash or rebase into `testing`, `qa` still gets the original branch commits, but `testing` has copies.
