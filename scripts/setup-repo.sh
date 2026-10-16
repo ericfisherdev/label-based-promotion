@@ -3,9 +3,10 @@
 #
 # One-time setup of the testing + qa promotion model on a GitHub repo:
 #   1. Creates (or updates) the promotion labels.
-#   2. Creates the testing and qa branches from the default branch.
+#   2. Creates qa from the default branch, and testing from qa.
 #   3. Lets GitHub Actions open PRs, and keeps head branches after merge.
 #   4. Adds branch protection with the guardrail checks as required checks.
+#   5. Adds a ruleset: PRs into testing and qa use merge commits only.
 #
 # Safe to run again. Needs gh with admin rights on the repo.
 set -euo pipefail
@@ -69,3 +70,37 @@ protect() {
 # testing allows force push for the sprint reset (git push --force-with-lease).
 protect testing true no-testing-merge app
 protect qa false no-testing-merge qa-gate app
+
+echo "== Merge method ruleset"
+# PRs into testing and qa must use "Create a merge commit". A squash or rebase
+# merge makes copies of the feature commits, so git no longer sees that a
+# stacked or later branch already contains them, and the merge conflicts.
+# No bypass actors, so admins cannot skip it either. The sprint reset of
+# testing turns the ruleset off for the push (see README).
+ruleset="$(jq -n '{
+  name: "merge-commit-only",
+  target: "branch",
+  enforcement: "active",
+  conditions: {ref_name: {include: ["refs/heads/testing", "refs/heads/qa"], exclude: []}},
+  rules: [{
+    type: "pull_request",
+    parameters: {
+      allowed_merge_methods: ["merge"],
+      required_approving_review_count: 0,
+      dismiss_stale_reviews_on_push: false,
+      require_code_owner_review: false,
+      require_last_push_approval: false,
+      required_review_thread_resolution: false
+    }
+  }]
+}')"
+# Repo rulesets only (not org rulesets), all pages.
+ruleset_id="$(gh api --paginate "repos/$repo/rulesets?includes_parents=false" \
+  --jq '.[] | select(.source_type == "Repository" and .name == "merge-commit-only") | .id' | head -n1)"
+if [[ -n "$ruleset_id" ]]; then
+  gh api -X PUT "repos/$repo/rulesets/$ruleset_id" --input - <<<"$ruleset" >/dev/null
+  echo "merge-commit-only updated (testing, qa: merge commits only)"
+else
+  gh api -X POST "repos/$repo/rulesets" --input - <<<"$ruleset" >/dev/null
+  echo "merge-commit-only created (testing, qa: merge commits only)"
+fi
