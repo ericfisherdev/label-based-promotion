@@ -4,11 +4,12 @@
 # Fails when <head-ref> contains commits that came from the testing branch.
 #
 # A commit "came from testing" when it is on the first-parent chain of
-# testing and is not in qa. Every PR merge into testing (merge, squash or
-# rebase) adds commits to that chain. The commits of a feature branch enter
-# testing only as the second parent of a merge commit, so they are never on
-# the chain. If a feature branch merges testing, the tip of testing (a chain
-# commit) becomes reachable from the branch, and this check catches it.
+# testing and is not in qa. Every PR merge into testing adds a merge commit
+# to that chain (merge commits only, see scripts/setup-repo.sh). The commits
+# of a feature branch enter testing only as the second parent of a merge
+# commit, so they are never on the chain. If a feature branch merges testing,
+# the tip of testing (a chain commit) becomes reachable from the branch, and
+# this check catches it.
 #
 # Prints a markdown report on stdout.
 set -euo pipefail
