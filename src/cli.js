@@ -35,11 +35,16 @@ try {
     case 'rm':
       list.remove(Number(args[0]));
       break;
+    case 'stats': {
+      const { total, done, open } = list.stats();
+      console.log(`${total} total, ${done} done, ${open} open`);
+      process.exit(0);
+    }
     case 'ls':
     case undefined:
       break;
     default:
-      console.error('Usage: todo [add <title> | done <id> | mv <id> <title> | rm <id> | ls]');
+      console.error('Usage: todo [add <title> | done <id> | mv <id> <title> | rm <id> | stats | ls]');
       process.exit(2);
   }
 } catch (error) {
