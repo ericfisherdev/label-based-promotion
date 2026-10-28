@@ -55,6 +55,12 @@ export class TodoList {
     return this.#items.map((item) => ({ ...item }));
   }
 
+  stats() {
+    const done = this.#items.filter((item) => item.done).length;
+
+    return { total: this.#items.length, done, open: this.#items.length - done };
+  }
+
   toJSON() {
     return { nextId: this.#nextId, items: this.list() };
   }
