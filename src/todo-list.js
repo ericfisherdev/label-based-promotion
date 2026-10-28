@@ -21,6 +21,12 @@ export class TodoList {
     return { ...item };
   }
 
+  search(text) {
+    const needle = String(text ?? '').trim().toLowerCase();
+
+    return this.list().filter((item) => item.title.toLowerCase().includes(needle));
+  }
+
   rename(id, title) {
     const trimmed = String(title ?? '').trim();
     if (trimmed === '') {
